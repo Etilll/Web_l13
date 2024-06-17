@@ -7,11 +7,12 @@ from ..database.models import User
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from ..services.auth import auth_service
+from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
-@router.get("/", response_model=list[ResponseContact])
-async def all_contacts(curr_user: User = Depends(auth_service.get_current_user), db: Session=Depends(get_db), 
+@router.get("/", response_model=list[ResponseContact], description='No more than 10 requests per minute', dependencies=[Depends(RateLimiter(times=10, seconds=60))])
+async def all_contacts(skip: int = 0, limit: int = 100, curr_user: User = Depends(auth_service.get_current_user), db: Session=Depends(get_db), 
                     id: Annotated[int | None, Query(alias="id", example="id=42")]=None,
                     name: Annotated[str | None, Query(alias="name", example="name=Jone")]=None, 
                     surname: Annotated[str | None, Query(alias="surname", example="surname=Jenkins")]=None, 
@@ -24,7 +25,7 @@ async def all_contacts(curr_user: User = Depends(auth_service.get_current_user),
         return response
 
 
-@router.post("/")
+@router.post("/", description='Should not add more that 5 contacts per minute', dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def add_contact(contact: PostContact, curr_user: User = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     response = await contact_funcs.add_contact(user=curr_user,contact=contact,db=db)
     if type(response) == IntegrityError:
@@ -32,7 +33,7 @@ async def add_contact(contact: PostContact, curr_user: User = Depends(auth_servi
     else:
         return response
 
-@router.delete("/{contact_id}")
+@router.delete("/{contact_id}", description='Should not delete more that 5 contacts per minute', dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def del_contact(contact_id: Annotated[int, Path(title="The id of a contact to delete")], curr_user: User = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     response = await contact_funcs.delete_contact(user=curr_user,contact_id=contact_id, db=db)
     if response:
@@ -40,7 +41,7 @@ async def del_contact(contact_id: Annotated[int, Path(title="The id of a contact
     else:
         raise HTTPException(status_code=404, detail="No specified contact was found!")
 
-@router.put("/{contact_id}")
+@router.put("/{contact_id}", description='Should not edit more that 5 contacts per minute', dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def put_contact(contact_id: Annotated[int, Path(title="The id of a contact to delete")], curr_user: User = Depends(auth_service.get_current_user), db: Session = Depends(get_db), 
                     id: Annotated[int | None, Query(alias="id", example="id=42")]=None,
                     name: Annotated[str | None, Query(alias="name", example="name=Jone")]=None, 
@@ -53,7 +54,7 @@ async def put_contact(contact_id: Annotated[int, Path(title="The id of a contact
     else:
         raise HTTPException(status_code=404, detail="No specified contact was found!")
 
-@router.get("/bdays")
+@router.get("/bdays", description='Should not update birthday list more than two times per minute', dependencies=[Depends(RateLimiter(times=2, seconds=60))])
 async def calc_birthdays(curr_user: User = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     response = await contact_funcs.calculate_birthdays(user=curr_user,db=db)
     return response
